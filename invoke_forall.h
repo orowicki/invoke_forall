@@ -2,9 +2,15 @@
 #define INVOKE_FORALL_H
 
 template <typename... Args> 
-constexpr auto invoke_forall(Args &&...args);
+constexpr auto invoke_forall(Args&&... args)
+{
+
+}
 
 template <typename T> 
-constexpr decltype(auto) protect_arg(T &&);
+constexpr decltype(auto) protect_arg(T&&)
+{
+    
+}
 
-#endif // header-guard
+#endif /* INVOKE_FORALL_H */
