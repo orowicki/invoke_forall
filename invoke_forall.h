@@ -58,8 +58,8 @@ concept TupleLike = requires {
 
 template <typename T>
 concept Gettable = TupleLike<T> && !Protected<T> && requires(T t) {
-    []<size_t... I>(index_sequence<I...>, T& x) {
-        ((void)get<I>(x), ...);
+    []<size_t... Is>(index_sequence<Is...>, T& x) {
+        ((void)get<Is>(x), ...);
     }(make_index_sequence<tuple_size_v<remove_cvref_t<T>>>{}, t);
 };
 
