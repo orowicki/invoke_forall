@@ -37,6 +37,8 @@ template <typename T> constexpr typ protect_arg(T&&);
 
 gdzie `typ` jest też do zaprojektowania. Jeżeli `j`-ty argument wywołania `invoke_forall` ma postać `protect_arg(argj)`, to w każdym wywołaniu `std::invoke` argumentem `j`-tym powinno być `argj` z zachowaniem *perfect forwarding*.
 
+**Uwaga.** Jeżeli argumenty wywołania `invoke_forall` implikują co najmniej dwukrotne wywołanie `std::invoke` i istnieje zwykły argument (niekrotkowy), który jest r-wartością, to należy pamiętać, że r-wartość można przekazać dalej tylko raz, więc w pozostałych wywołaniach niezbędne jest utworzenie kopii tego argumentu przed przekazaniem go do `std::invoke`. Zakładamy, że taki argument ma zdefiniowany zarówno konstruktor kopiujący, jak i przenoszący.
+
 # Wymagania
 
 - Należy zastosować zasadę *perfect forwarding* przy wykonywania `std::invoke`.
