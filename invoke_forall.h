@@ -10,11 +10,14 @@
 #include <utility>
 #include <variant>
 
-// na niektore using (np. using std::forward) krzyczy clang++, wiec zostaje std
+namespace detail
+{
 
 using std::array;
+using std::get;
 using std::index_sequence;
 using std::invoke;
+using std::is_rvalue_reference_v;
 using std::make_index_sequence;
 using std::monostate;
 using std::remove_cvref_t;
@@ -23,9 +26,6 @@ using std::size_t;
 using std::tuple;
 using std::tuple_size;
 using std::tuple_size_v;
-
-namespace detail
-{
 
 /**
  * Argument protecting logic
@@ -74,70 +74,31 @@ concept NoneGettable = (... && !Gettable<Args>);
 
 /* -------------------------------------------------------------------------- */
 
-/*
-> Uwaga.
-> Jeżeli argumenty wywołania invoke_forall implikują co najmniej dwukrotne
-> wywołanie std::invoke i istnieje zwykły argument (niekrotkowy), który jest
-> r-wartością, to należy pamiętać, że r-wartość można przekazać dalej tylko raz,
-> więc w pozostałych wywołaniach niezbędne jest utworzenie kopii tego argumentu
-> przed przekazaniem go do std::invoke. Zakładamy, że taki argument ma
-> zdefiniowany zarówno konstruktor kopiujący, jak i przenoszący.
-
-TODO: przemyslec
-*/
-template <std::size_t I, std::size_t A, typename T>
+template <size_t I, size_t A, typename T>
 constexpr decltype(auto) forward_move_once(T&& t) {
     if constexpr (I + 1 == A)
         return std::forward<T>(t);
     else {
-        if constexpr (std::is_rvalue_reference_v<T>)
-            return T(t);
+        if constexpr (is_rvalue_reference_v<T&&>)   // TODO: przemyslec
+            return T(t);                            // to tez
         else
             return t;
     }
 }
 
-template <std::size_t I, typename T> 
+template <size_t I, typename T> 
 constexpr decltype(auto) try_get(T&& t)
 {
-    if constexpr (Protected<T>) {
-        /*
-        if constexpr (std::is_lvalue_reference_v<T>) {
-            return std::forward<T>(t.value);
-        } else {
-            return t.value;
-        }
-         */
-        return (std::forward<T>(t).value);
-    } else if constexpr (Gettable<T>) {
-        return std::get<I>(std::forward<T>(t));
-    } else {
+    if constexpr (Gettable<T>)
+        return get<I>(std::forward<T>(t));
+    else
         return std::forward<T>(t);
-    }
 }
-
-/**
- * Finds the arity of the first unprotected TupleLike argument.
- * If successful returns it, otherwise returns 0.
- */
-/*
-template <typename... Args>
-constexpr std::size_t find_first_arity()
-{
-    std::size_t result = 0;
-    (((result == 0 && !Protected<Args> && TupleLike<Args>)
-          ? result = std::tuple_size_v<std::remove_cvref_t<Args>>
-          : 0),
-     ...);
-    return result;
-}
-*/
 
 template <typename... Args>
 constexpr std::size_t find_first_arity()
 {
     std::size_t result = 1;
-    // fold expression over Args
     (([&] {
         if constexpr (!Protected<Args> && TupleLike<Args>) {
             if (result == 1) {
@@ -159,20 +120,20 @@ constexpr decltype(auto) invoke_at(Args&&... args)
         return invoke(try_get<I>(std::forward<Args>(args))...);
 }
 
-// TODO: forward_move_once()
-// uwaga co do przenoszenia, okreslajac typ chcemy wysylac kopie, a przeniesc
-// dopiero wolajac invoke_at (a jesli nie jest Gettable, to wolajac invoke_at
-// dopiero przy najwiekszym indeksie w Is)
 template <size_t... Is, typename... Args>
 constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>, Args&&... args)
 {
-    using invoke_at0_type = decltype(invoke_at<0>(args...));
+    using invoke_at0_type = decltype(invoke_at<0>(args...));                                // czy tutaj jakies forward_move_never() ?
     constexpr size_t arity = sizeof...(Is);
 
-    if constexpr ((... && same_as<invoke_at0_type, decltype(invoke_at<Is>(args...))>))
-        return array<invoke_at0_type, arity>{invoke_at<Is>(args...)...}; // tu powinno byc forward_move_once()
+    if constexpr ((... && same_as<invoke_at0_type, decltype(invoke_at<Is>(args...))>))      // i tutaj tez?
+        return array<invoke_at0_type, arity>{
+            invoke_at<Is>(forward_move_once<Is, arity>(std::forward<Args>(args))...)...
+        };
     else
-        return tuple{invoke_at<Is>(args...)...}; // i tu tez
+        return tuple{
+            invoke_at<Is>(forward_move_once<Is, arity>(std::forward<Args>(args))...)...
+        };
 }
 
 template <typename F, typename... Args>
