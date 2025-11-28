@@ -1,3 +1,18 @@
+/**
+ * Interface and implementation of the invoke_forall template.
+ *
+ * Authors: Adam Bęcłowicz, Oskar Rowicki
+ * Date 28.11.2025
+ *
+ * The invoke_forall template allows the user to perform multiple
+ * std::invoke calls. The function takes both regular and tuple-like arguments 
+ * and returns an object that the user can use get<I> on to get the result of the
+ * I-th invoke.
+ *
+ * The module also provides the protect_arg() function that makes invoke_forall 
+ * treat the protected tuple-like argument as a regular arg.
+ */
+
 #ifndef INVOKE_FORALL_H
 #define INVOKE_FORALL_H
 
@@ -10,6 +25,7 @@
 #include <utility>
 #include <variant>
 
+/** Hidden implementation details. */
 namespace detail
 {
 
@@ -30,12 +46,10 @@ using std::tuple;
 using std::tuple_size;
 using std::tuple_size_v;
 
-/**
- * Argument protecting logic
- */
+/** Argument protecting logic */
 template <typename T> 
 struct protected_arg {
-    T &&value;
+    T value;
     using is_protected = void;
 
     explicit constexpr protected_arg(T &&arg) : value(std::forward<T>(arg)) {}
@@ -46,6 +60,7 @@ concept Protected = requires(T t) { typename remove_cvref_t<T>::is_protected; };
 
 /* -------------------------------------------------------------------------- */
 
+/** T is TupleLike if std::tuple_size<T> is defined for it. */
 template <typename T>
 concept HasTupleSize = requires {
     typename tuple_size<remove_cvref_t<T>>;
@@ -69,6 +84,10 @@ concept TupleLike = HasTupleSizeDerivedFromIntegralConstant<T> &&
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * T is Gettable if it's TupleLike and std::get<I> is defined for every
+ * index I = 0, ..., std::tuple_size_v<T> - 1
+ */
 template <typename T>
 concept Gettable = TupleLike<T> && !Protected<T> && requires(T t) {
     []<size_t... Is>(index_sequence<Is...>, T & x) {
@@ -100,6 +119,7 @@ constexpr decltype(auto) forward_copy_rvalue(T &&t)
     }
 }
 
+/** Returns std::get<I> of t if t is Gettable, otherwise returns t. */
 template <size_t I, typename T> 
 constexpr decltype(auto) try_get(T &&t)
 {
@@ -118,33 +138,32 @@ constexpr decltype(auto) try_get(T &&t)
 template <typename... Args>
 concept NonEmpty = sizeof...(Args) > 0;
 
-// TODO: rewrite (?)
-template <typename... Args> 
-constexpr size_t first_arity()
-{
-    size_t arity = 0;
-    (([&] {
-         if constexpr (Gettable<Args>) {
-             if (arity == 0) {
-                 arity = tuple_size_v<remove_cvref_t<Args>>;
-             }
-         }
-     }()),
-     ...);
-    return arity;
+/** Finds the arity of the first Gettable argument in Args. */
+template <typename T, typename... Args>
+constexpr size_t first_arity() {
+    if constexpr (Gettable<T>) return tuple_size_v<remove_cvref_t<T>>;
+    else if constexpr (sizeof...(Args) > 0) return first_arity<Args...>();
+    else return 0;
 }
 
+/** Satisfied if T isn't Gettable or is Gettable and has arity equal to Arity. */
 template <size_t Arity, typename T>
 concept HasArity = !Gettable<T> || tuple_size_v<remove_cvref_t<T>> == Arity;
 
+/** True if all Args have arity equal Arity. */
 template <size_t Arity, typename... Args>
 concept HaveArity = (... && HasArity<Arity, Args>);
 
+/** True if all Args have the same arity. */
 template <typename... Args>
 concept SameArity = HaveArity<first_arity<Args...>(), Args...>;
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Calls invoke with the I-th elements of Args.
+ * (if arg isn't Gettable, passes the arg instead)
+ */
 template <size_t I, typename... Args>
 constexpr decltype(auto) invoke_at_simple(Args &&...args)
 {
@@ -160,6 +179,7 @@ constexpr decltype(auto) invoke_at_simple(Args &&...args)
     }
 }
 
+
 template <size_t A, size_t I, typename... Args>
 constexpr decltype(auto) invoke_at(Args &&...args)
 {
@@ -173,7 +193,6 @@ constexpr decltype(auto) invoke_for_all_indices(index_sequence<Is...>,
                                                 Args &&...args)
 {
     constexpr size_t arity = sizeof...(Is);
-
     using result_type =
         decltype(invoke_at<arity, 0>(std::forward<Args>(args)...));
 
