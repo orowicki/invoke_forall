@@ -114,11 +114,11 @@ template <size_t I, typename... Args>
 constexpr decltype(auto) invoke_at(Args&&... args)
 {
     if constexpr (same_as<decltype(invoke(try_get<I>(args)...)), void>) {
+        invoke(try_get<I>(std::forward<Args>(args))...);
         return monostate{};
     } else {
         return invoke(try_get<I>(std::forward<Args>(args))...);
     }
-
 }
 
 template <size_t I, size_t A, typename... Args>
