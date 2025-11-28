@@ -18,6 +18,7 @@ using std::get;
 using std::index_sequence;
 using std::invoke;
 using std::is_rvalue_reference_v;
+using std::is_void_v;
 using std::make_index_sequence;
 using std::monostate;
 using std::remove_cvref_t;
@@ -57,25 +58,36 @@ concept Gettable = TupleLike<T> && !Protected<T> && requires(T t) {
     }(make_index_sequence<tuple_size_v<remove_cvref_t<T>>>{}, t);
 };
 
+template <size_t A, typename T>
+concept HasArity = !Gettable<T> || tuple_size_v<remove_cvref_t<T>> == A;
+
 template <size_t A, typename... Args>
-concept SameArityAs = (... && (!Gettable<Args> || tuple_size_v<remove_cvref_t<Args>> == A));
+concept HaveArity = (... && HasArity<A, Args>);
 
 template <typename... Args>
-concept SameArity = SameArityAs<find_first_arity<Args...>(), Args...>;
+concept SameArity = HaveArity<first_arity<Args...>(), Args...>;
 
 template <typename... Args>
 concept NoneGettable = (... && !Gettable<Args>);
 
 /* -------------------------------------------------------------------------- */
 
-template <size_t I, size_t A, typename T>
+template <size_t A, size_t I, typename T>
 constexpr decltype(auto) forward_move_once(T&& t) {
-    if constexpr (I + 1 == A)
+    if constexpr (A == I + 1) {
         return std::forward<T>(t);
+    }
     else {
-        if constexpr (!Protected<T> && is_rvalue_reference_v<T&&>) {  // TODO: przemyslec
-            return T(t);                            // to tez
-        } else {
+        if constexpr (!Gettable<T> && is_rvalue_reference_v<T&&>) {
+            if constexpr (Protected<T>) {
+                return std::forward<T>(t); // to powinno byc zmienione
+                                           // na cos co tworzy deep-copy
+            }
+            else {
+                return T(t);
+            }
+        }
+        else {
             return std::forward<T>(t);
         }
     }
@@ -84,28 +96,33 @@ constexpr decltype(auto) forward_move_once(T&& t) {
 template <size_t I, typename T> 
 constexpr decltype(auto) try_get(T&& t)
 {
-    if constexpr (Protected<T>) {
-        auto&& value = std::forward<T>(t).value;
-        return std::forward<decltype(value)>(value);
-    } else if constexpr (Gettable<T>) {
+    if constexpr (Gettable<T>) {
         return get<I>(std::forward<T>(t));
-    } else {
-        return std::forward<T>(t);
+    }
+    else {
+        if constexpr (Protected<T>) {
+            auto&& value = std::forward<T>(t).value;
+            return std::forward<decltype(value)>(value);
+        }
+        else {
+            return std::forward<T>(t);
+        }
     }
 }
 
+// TODO: rewrite (?)
 template <typename... Args>
-constexpr std::size_t find_first_arity()
+constexpr size_t first_arity()
 {
-    std::size_t result = 1;
+    size_t arity = 0;
     (([&] {
-        if constexpr (!Protected<Args> && TupleLike<Args>) {
-            if (result == 1) {
-                result = std::tuple_size_v<std::remove_cvref_t<Args>>;
+        if constexpr (Gettable<Args>) {
+            if (arity == 0) {
+                arity = tuple_size_v<remove_cvref_t<Args>>;
             }
         }
     }()), ...);
-    return result;
+    return arity;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -113,43 +130,59 @@ constexpr std::size_t find_first_arity()
 template <size_t I, typename... Args>
 constexpr decltype(auto) invoke_at(Args&&... args)
 {
-    if constexpr (same_as<decltype(invoke(try_get<I>(args)...)), void>) {
-        invoke(try_get<I>(std::forward<Args>(args))...);
-        return monostate{};
-    } else {
+    auto call_invoke = [&]() -> decltype(auto) {
         return invoke(try_get<I>(std::forward<Args>(args))...);
+    };
+
+    if constexpr (is_void_v<decltype(call_invoke())>) {
+        call_invoke();
+        return monostate{};
+    }
+    else {
+        return call_invoke();
     }
 }
 
-template <size_t I, size_t A, typename... Args>
-constexpr decltype(auto) invoke_at_with_forward(Args&&... args)
+template <size_t A, size_t I, typename... Args>
+constexpr decltype(auto) invoke_at_helper(Args&&... args)
 {
-    return invoke_at<I>(forward_move_once<I, A>(std::forward<Args>(args))...);
+    return invoke_at<I>(forward_move_once<A, I>(std::forward<Args>(args))...);
 }
 
+// TODO: cosmetics
 template <size_t... Is, typename... Args>
 constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>, Args&&... args)
 {
-    using invoke_at0_type = decltype(invoke_at<0>(args...));                                // czy tutaj jakies forward_move_never() ?
-    constexpr size_t arity = sizeof...(Is);
+    constexpr size_t arity = sizeof...(Is);        
+    
+    using result_type = decltype(
+        invoke_at_helper<arity, 0>(std::forward<Args>(args)...)
+    );
 
-    if constexpr ((... && same_as<invoke_at0_type, decltype(invoke_at<Is>(args...))>))      // i tutaj tez?
-        return array<invoke_at0_type, arity>{
-            invoke_at_with_forward<Is, arity>(std::forward<Args>(args)...)...
+    if constexpr ((... && same_as<result_type, decltype(invoke_at_helper<arity, Is>(std::forward<Args>(args)...))>)) {
+        return array<result_type, arity>{
+            invoke_at_helper<arity, Is>(std::forward<Args>(args)...)...
         };
-    else
+    }
+    else {
         return tuple{ 
-            invoke_at_with_forward<Is, arity>(std::forward<Args>(args)...)...
+            invoke_at_helper<arity, Is>(std::forward<Args>(args)...)...
         };
+    }
 }
 
 template <typename F, typename... Args>
 constexpr decltype(auto) invoke_forall(F&& f, Args&&... args) {
-    if constexpr (NoneGettable<F, Args...>)
+    if constexpr (NoneGettable<F, Args...>) {
         return invoke_at<0>(std::forward<F>(f), std::forward<Args>(args)...);
+    }
     else {
-        constexpr size_t arity = find_first_arity<F, Args...>();
-        return invoke_forall_helper(make_index_sequence<arity>{}, std::forward<F>(f), std::forward<Args>(args)...);
+        constexpr size_t arity = first_arity<F, Args...>();
+
+        return invoke_forall_helper(
+            make_index_sequence<arity>{},
+            std::forward<F>(f), std::forward<Args>(args)...
+        );
     }
 }
 
