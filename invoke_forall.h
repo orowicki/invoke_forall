@@ -173,18 +173,18 @@ constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>, Args&&... a
     }
 }
 
-template <typename F, typename... Args>
-    requires SameArity<F, Args...>
-constexpr decltype(auto) invoke_forall(F&& f, Args&&... args) {
-    if constexpr (NoneGettable<F, Args...>) {
-        return invoke_at<0>(std::forward<F>(f), std::forward<Args>(args)...);
+template <typename... Args>
+    requires (sizeof...(Args) > 0 && SameArity<Args...>)
+constexpr decltype(auto) invoke_forall(Args&&... args) {
+    if constexpr (NoneGettable<Args...>) {
+        return invoke_at<0>(std::forward<Args>(args)...);
     }
     else {
-        constexpr size_t arity = first_arity<F, Args...>();
+        constexpr size_t arity = first_arity<Args...>();
 
         return invoke_forall_helper(
             make_index_sequence<arity>{},
-            std::forward<F>(f), std::forward<Args>(args)...
+            std::forward<Args>(args)...
         );
     }
 }
