@@ -32,20 +32,14 @@ using std::tuple_size_v;
  */
 template <typename T> 
 struct protected_arg {
-    T value;
+    T&& value;
+    using is_protected = void;
 
-    template <typename U>
-    explicit constexpr protected_arg(U&& arg) : value(std::forward<U>(arg)) {}
+    explicit constexpr protected_arg(T&& arg) : value(std::forward<T>(arg)) {}
 };
 
 template <typename T>
-struct is_protected : std::false_type {};
-
-template <typename T>
-struct is_protected<protected_arg<T>> : std::true_type {};
-
-template <typename T>
-concept Protected = is_protected<std::remove_cvref_t<T>>::value;
+concept Protected = requires(T t) { typename remove_cvref_t<T>::is_protected; };
 
 /* -------------------------------------------------------------------------- */
 
@@ -79,20 +73,25 @@ constexpr decltype(auto) forward_move_once(T&& t) {
     if constexpr (I + 1 == A)
         return std::forward<T>(t);
     else {
-        if constexpr (is_rvalue_reference_v<T&&>)   // TODO: przemyslec
+        if constexpr (is_rvalue_reference_v<T&&>) {  // TODO: przemyslec
             return T(t);                            // to tez
-        else
-            return t;
+        } else {
+            return std::forward<T>(t);
+        }
     }
 }
 
 template <size_t I, typename T> 
 constexpr decltype(auto) try_get(T&& t)
 {
-    if constexpr (Gettable<T>)
+    if constexpr (Protected<T>) {
+        auto&& value = std::forward<T>(t).value;
+        return std::forward<decltype(value)>(value);
+    } else if constexpr (Gettable<T>) {
         return get<I>(std::forward<T>(t));
-    else
+    } else {
         return std::forward<T>(t);
+    }
 }
 
 template <typename... Args>
@@ -114,10 +113,11 @@ constexpr std::size_t find_first_arity()
 template <size_t I, typename... Args>
 constexpr decltype(auto) invoke_at(Args&&... args)
 {
-    if constexpr (same_as<decltype(invoke(try_get<I>(args)...)), void>)
+    if constexpr (same_as<decltype(invoke(try_get<I>(args)...)), void>) {
         return monostate{};
-    else
+    } else {
         return invoke(try_get<I>(std::forward<Args>(args))...);
+    }
 }
 
 template <size_t... Is, typename... Args>
