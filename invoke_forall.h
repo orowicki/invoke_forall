@@ -103,6 +103,9 @@ constexpr decltype(auto) try_get(T&& t)
 
 /* -------------------------------------------------------------------------- */
 
+template <typename... Args>
+concept AtLeastOneArg = sizeof...(Args) > 0;
+
 // TODO: rewrite (?)
 template <typename... Args>
 constexpr size_t first_arity()
@@ -174,7 +177,7 @@ constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>, Args&&... a
 }
 
 template <typename... Args>
-    requires (sizeof...(Args) > 0 && SameArity<Args...>)
+requires AtLeastOneArg<Args...> && SameArity<Args...>
 constexpr decltype(auto) invoke_forall(Args&&... args) {
     if constexpr (NoneGettable<Args...>) {
         return invoke_at<0>(std::forward<Args>(args)...);
