@@ -16,7 +16,9 @@ namespace detail
 using std::array;
 using std::get;
 using std::index_sequence;
+using std::integral_constant;
 using std::invoke;
+using std::is_base_of_v;
 using std::is_rvalue_reference_v;
 using std::is_void_v;
 using std::make_index_sequence;
@@ -45,11 +47,27 @@ concept Protected = requires(T t) { typename remove_cvref_t<T>::is_protected; };
 /* -------------------------------------------------------------------------- */
 
 template <typename T>
-concept TupleLike = requires {
-    sizeof(tuple_size<remove_cvref_t<T>>);
-} && requires {
+concept HasTupleSize = requires {
+    typename tuple_size<remove_cvref_t<T>>;
+};
+
+template <typename T>
+concept HasTupleSizeDerivedFromIntegralConstant = HasTupleSize<T> &&
+    is_base_of_v<
+        integral_constant<size_t, tuple_size<remove_cvref_t<T>>::value>,
+        tuple_size<remove_cvref_t<T>>
+    >;
+
+template <typename T>
+concept HasTupleSizeValue = HasTupleSize<T> && requires {
     { tuple_size_v<remove_cvref_t<T>> };
 };
+
+template <typename T>
+concept TupleLike = HasTupleSizeDerivedFromIntegralConstant<T> &&
+                    HasTupleSize<T>;
+
+/* -------------------------------------------------------------------------- */
 
 template <typename T>
 concept Gettable = TupleLike<T> && !Protected<T> && requires(T t) {
@@ -104,7 +122,7 @@ constexpr decltype(auto) try_get(T&& t)
 /* -------------------------------------------------------------------------- */
 
 template <typename... Args>
-concept AtLeastOneArg = sizeof...(Args) > 0;
+concept NonEmpty = sizeof...(Args) > 0;
 
 // TODO: rewrite (?)
 template <typename... Args>
@@ -177,7 +195,7 @@ constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>, Args&&... a
 }
 
 template <typename... Args>
-requires AtLeastOneArg<Args...> && SameArity<Args...>
+    requires NonEmpty<Args...> && SameArity<Args...>
 constexpr decltype(auto) invoke_forall(Args&&... args) {
     if constexpr (NoneGettable<Args...>) {
         return invoke_at<0>(std::forward<Args>(args)...);
