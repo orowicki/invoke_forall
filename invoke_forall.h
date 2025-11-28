@@ -58,15 +58,6 @@ concept Gettable = TupleLike<T> && !Protected<T> && requires(T t) {
     }(make_index_sequence<tuple_size_v<remove_cvref_t<T>>>{}, t);
 };
 
-template <size_t A, typename T>
-concept HasArity = !Gettable<T> || tuple_size_v<remove_cvref_t<T>> == A;
-
-template <size_t A, typename... Args>
-concept HaveArity = (... && HasArity<A, Args>);
-
-template <typename... Args>
-concept SameArity = HaveArity<first_arity<Args...>(), Args...>;
-
 template <typename... Args>
 concept NoneGettable = (... && !Gettable<Args>);
 
@@ -110,6 +101,8 @@ constexpr decltype(auto) try_get(T&& t)
     }
 }
 
+/* -------------------------------------------------------------------------- */
+
 // TODO: rewrite (?)
 template <typename... Args>
 constexpr size_t first_arity()
@@ -124,6 +117,15 @@ constexpr size_t first_arity()
     }()), ...);
     return arity;
 }
+
+template <size_t A, typename T>
+concept HasArity = !Gettable<T> || tuple_size_v<remove_cvref_t<T>> == A;
+
+template <size_t A, typename... Args>
+concept HaveArity = (... && HasArity<A, Args>);
+
+template <typename... Args>
+concept SameArity = HaveArity<first_arity<Args...>(), Args...>;
 
 /* -------------------------------------------------------------------------- */
 
@@ -172,6 +174,7 @@ constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>, Args&&... a
 }
 
 template <typename F, typename... Args>
+    requires SameArity<F, Args...>
 constexpr decltype(auto) invoke_forall(F&& f, Args&&... args) {
     if constexpr (NoneGettable<F, Args...>) {
         return invoke_at<0>(std::forward<F>(f), std::forward<Args>(args)...);
