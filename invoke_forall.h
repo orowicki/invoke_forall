@@ -73,7 +73,7 @@ constexpr decltype(auto) forward_move_once(T&& t) {
     if constexpr (I + 1 == A)
         return std::forward<T>(t);
     else {
-        if constexpr (is_rvalue_reference_v<T&&>) {  // TODO: przemyslec
+        if constexpr (!Protected<T> && is_rvalue_reference_v<T&&>) {  // TODO: przemyslec
             return T(t);                            // to tez
         } else {
             return std::forward<T>(t);
@@ -118,6 +118,13 @@ constexpr decltype(auto) invoke_at(Args&&... args)
     } else {
         return invoke(try_get<I>(std::forward<Args>(args))...);
     }
+
+}
+
+template <size_t I, size_t A, typename... Args>
+constexpr decltype(auto) invoke_at_with_forward(Args&&... args)
+{
+    return invoke_at<I>(forward_move_once<I, A>(std::forward<Args>(args))...);
 }
 
 template <size_t... Is, typename... Args>
@@ -128,11 +135,11 @@ constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>, Args&&... a
 
     if constexpr ((... && same_as<invoke_at0_type, decltype(invoke_at<Is>(args...))>))      // i tutaj tez?
         return array<invoke_at0_type, arity>{
-            invoke_at<Is>(forward_move_once<Is, arity>(std::forward<Args>(args))...)...
+            invoke_at_with_forward<Is, arity>(std::forward<Args>(args)...)...
         };
     else
-        return tuple{
-            invoke_at<Is>(forward_move_once<Is, arity>(std::forward<Args>(args))...)...
+        return tuple{ 
+            invoke_at_with_forward<Is, arity>(std::forward<Args>(args)...)...
         };
 }
 
