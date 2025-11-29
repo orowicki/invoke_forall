@@ -30,11 +30,11 @@ namespace detail
 {
 
 using std::array;
-using std::derived_from;
 using std::get;
 using std::index_sequence;
 using std::integral_constant;
 using std::invoke;
+using std::is_base_of_v;
 using std::is_rvalue_reference_v;
 using std::is_void_v;
 using std::make_index_sequence;
@@ -66,9 +66,9 @@ concept HasTupleSize = requires {
 
 template <typename T>
 concept HasTupleSizeDerivedFromIntegralConstant = HasTupleSize<T> &&
-    derived_from<
-        tuple_size<remove_cvref_t<T>>,
-        integral_constant<size_t, tuple_size<remove_cvref_t<T>>::value>
+    is_base_of_v<
+        integral_constant<size_t, tuple_size<remove_cvref_t<T>>::value>,
+        tuple_size<remove_cvref_t<T>>
     >;
 
 /**
@@ -86,11 +86,12 @@ concept TupleLike = HasTupleSizeDerivedFromIntegralConstant<T>;
  * std::tuple_size_v<T> - 1`.
  */
 template <typename T>
-concept Gettable = TupleLike<T> && !Protected<T> && requires(T t) {
-    []<size_t... Is>(index_sequence<Is...>, T& x) {
-        ((void)get<Is>(x), ...);
-    }(make_index_sequence<tuple_size_v<remove_cvref_t<T>>>{}, t);
-};
+concept Gettable = TupleLike<T> && !Protected<T> &&
+    []<size_t... Is>(index_sequence<Is...>) {
+        return (... && requires(T t) {
+            (void)get<Is>(t);
+        });
+    }(make_index_sequence<tuple_size_v<remove_cvref_t<T>>>{});
 
 template <typename... Args>
 concept NoneGettable = (... && !Gettable<Args>);
