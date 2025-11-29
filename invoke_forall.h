@@ -115,16 +115,16 @@ template <std::size_t I, typename T>
 constexpr decltype(auto) try_get(T&& t)
 {
     if constexpr (Gettable<T>) {
-        // If `T` is Gettable, returns `std::get<I>(t)`.
+        // If T is Gettable, returns std::get<I>(t).
         return std::get<I>(std::forward<T>(t));
     }
     else if constexpr (Protected<T>) {
-        // If `T` is protected by `protect_arg()`, returns `t.value`.
+        // If T is protected by protect_arg(), returns (t.value).
         auto &&value = std::forward<T>(t).value;
         return std::forward<decltype(value)>(value);
     }
     else {
-        // Otherwise, returns `t`.
+        // Otherwise, returns t.
         return std::forward<T>(t);
     }
 }
@@ -221,7 +221,7 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
     if constexpr ((... && std::same_as<result_type,
         decltype(invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...))
     >)) {
-        // Instances of `std::array` support random access.
+        // Instances of std::array support random access.
         return std::array<result_type, arity>{
             invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
         };
