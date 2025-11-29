@@ -43,8 +43,6 @@ concept Protected = requires() {
     typename std::remove_cvref_t<T>::is_protected;
 };
 
-/* -------------------------------------------------------------------------- */
-
 template <typename T>
 concept HasTupleSize = requires {
     typename std::tuple_size<std::remove_cvref_t<T>>;
@@ -65,8 +63,6 @@ concept HasTupleSizeDerivedFromIntegralConstant = HasTupleSize<T> &&
 template <typename T>
 concept TupleLike = HasTupleSizeDerivedFromIntegralConstant<T>;
 
-/* -------------------------------------------------------------------------- */
-
 /// Satisfied if `std::get<I>(t)` is valid.
 template <std::size_t I, typename T>
 concept HasGet = requires(T t) {
@@ -86,8 +82,6 @@ concept Gettable = TupleLike<T> && !Protected<T> &&
 
 template <typename... Args>
 concept NoneGettable = (... && !Gettable<Args>);
-
-/* -------------------------------------------------------------------------- */
 
 /**
  * Tries to forward the given value `t`.
@@ -135,8 +129,6 @@ constexpr decltype(auto) try_get(T&& t)
     }
 }
 
-/* -------------------------------------------------------------------------- */
-
 template <typename... Args>
 concept NonEmpty = sizeof...(Args) > 0;
 
@@ -173,8 +165,6 @@ concept HaveArity = (... && HasArity<A, Args>);
 /// Satisfied if all arguments have the same arity.
 template <typename... Args>
 concept SameArity = HaveArity<first_arity_or_zero<Args...>(), Args...>;
-
-/* -------------------------------------------------------------------------- */
 
 /**
  * Performs the `I`-th `std::invoke(x1, ..., xn)` with:
