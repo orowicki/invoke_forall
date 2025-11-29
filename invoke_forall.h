@@ -1,16 +1,16 @@
 /**
- * Interface and implementation of the invoke_forall template.
+ * Interface and implementation of the `invoke_forall` template.
  *
  * Authors: Adam Bęcłowicz, Oskar Rowicki
- * Date 28.11.2025
+ * Date 29.11.2025
  *
- * The invoke_forall template allows the user to perform multiple
- * std::invoke calls. The function takes both regular and tuple-like arguments 
- * and returns an object that the user can use get<I> on to get the result of the
- * I-th invoke.
+ * The `invoke_forall` template allows the user to perform multiple
+ * `std::invoke` calls. The function takes both regular and *tuple-like*
+ * arguments and returns an object that the user can use `std::get<i>` on to
+ * get the result of the `i`-th invoke.
  *
- * The module also provides the protect_arg() function that makes invoke_forall 
- * treat the protected tuple-like argument as a regular arg.
+ * The module also provides the `protect_arg()` function that makes
+ * `invoke_forall` treat the protected *tuple-like* argument as a regular arg.
  */
 
 #ifndef INVOKE_FORALL_H
@@ -98,7 +98,6 @@ concept NoneGettable = (... && !Gettable<Args>);
 
 /* -------------------------------------------------------------------------- */
 
-// TODO: Protected<T>
 template <size_t A, size_t I, typename T>
 constexpr decltype(auto) forward_copy_rvalue(T&& t)
 {
@@ -108,8 +107,7 @@ constexpr decltype(auto) forward_copy_rvalue(T&& t)
     else {
         if constexpr (!Gettable<T> && is_rvalue_reference_v<T&&>) {
             if constexpr (Protected<T>) {
-                return std::forward<T>(t); // to powinno byc zmienione
-                                           // na cos co tworzy deep-copy
+                return std::forward<T>(t);
             }
             else {
                 return T(t);
@@ -121,7 +119,12 @@ constexpr decltype(auto) forward_copy_rvalue(T&& t)
     }
 }
 
-/// Returns `std::get<I>(t)` if `t` is *gettable*, otherwise returns `t`.
+/**
+ * Returns:
+ * - `std::get<I>(t)` if `t` is *gettable*
+ * - `t.value` if `t` is protected by `protect_arg()`
+ * - `t`, otherwise
+ */
 template <size_t I, typename T> 
 constexpr decltype(auto) try_get(T&& t)
 {
@@ -177,7 +180,7 @@ concept SameArity = HaveArity<first_arity_or_zero<Args...>(), Args...>;
 /**
  * Performs the I-th `std::invoke` with:
  * - `std::get<I>` applied to the argument if it is *gettable*
- * - the original argument otherwise
+ * - the original argument, otherwise
  */
 template <size_t I, typename... Args>
 constexpr decltype(auto) invoke_at_simple(Args&&... args)
