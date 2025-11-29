@@ -14,11 +14,11 @@ namespace detail
 {
 
 using std::array;
+using std::derived_from;
 using std::get;
 using std::index_sequence;
 using std::integral_constant;
 using std::invoke;
-using std::is_base_of_v;
 using std::is_rvalue_reference_v;
 using std::is_void_v;
 using std::make_index_sequence;
@@ -30,9 +30,7 @@ using std::tuple;
 using std::tuple_size;
 using std::tuple_size_v;
 
-/**
- * Argument protecting logic
- */
+// TODO: reimplement
 template <typename T> 
 struct protected_arg {
     T&& value;
@@ -40,7 +38,6 @@ struct protected_arg {
 
     explicit constexpr protected_arg(T&& arg) : value(std::forward<T>(arg)) {}
 };
-
 template <typename T>
 concept Protected = requires(T t) { typename remove_cvref_t<T>::is_protected; };
 
@@ -53,19 +50,13 @@ concept HasTupleSize = requires {
 
 template <typename T>
 concept HasTupleSizeDerivedFromIntegralConstant = HasTupleSize<T> &&
-    is_base_of_v<
-        integral_constant<size_t, tuple_size<remove_cvref_t<T>>::value>,
-        tuple_size<remove_cvref_t<T>>
+    derived_from<
+        tuple_size<remove_cvref_t<T>>,
+        integral_constant<size_t, tuple_size<remove_cvref_t<T>>::value>
     >;
 
 template <typename T>
-concept HasTupleSizeValue = HasTupleSize<T> && requires {
-    { tuple_size_v<remove_cvref_t<T>> };
-};
-
-template <typename T>
-concept TupleLike = HasTupleSizeDerivedFromIntegralConstant<T> &&
-                    HasTupleSize<T>;
+concept TupleLike = HasTupleSizeDerivedFromIntegralConstant<T>;
 
 /* -------------------------------------------------------------------------- */
 
@@ -81,6 +72,7 @@ concept NoneGettable = (... && !Gettable<Args>);
 
 /* -------------------------------------------------------------------------- */
 
+// TODO: Protected<T>
 template <size_t A, size_t I, typename T>
 constexpr decltype(auto) forward_move_once(T&& t) {
     if constexpr (A == I + 1) {
@@ -102,6 +94,7 @@ constexpr decltype(auto) forward_move_once(T&& t) {
     }
 }
 
+// TODO: Protected<T>
 template <size_t I, typename T> 
 constexpr decltype(auto) try_get(T&& t)
 {
@@ -124,18 +117,21 @@ constexpr decltype(auto) try_get(T&& t)
 template <typename... Args>
 concept NonEmpty = sizeof...(Args) > 0;
 
-// TODO: rewrite (?)
+/* -------------------------------------------------------------------------- */
+
 template <typename... Args>
-constexpr size_t first_arity()
+constexpr size_t first_arity_or_zero()
 {
     size_t arity = 0;
+
     (([&] {
         if constexpr (Gettable<Args>) {
             if (arity == 0) {
                 arity = tuple_size_v<remove_cvref_t<Args>>;
             }
         }
-    }()), ...);
+    }(), ...));
+
     return arity;
 }
 
@@ -146,7 +142,7 @@ template <size_t A, typename... Args>
 concept HaveArity = (... && HasArity<A, Args>);
 
 template <typename... Args>
-concept SameArity = HaveArity<first_arity<Args...>(), Args...>;
+concept SameArity = HaveArity<first_arity_or_zero<Args...>(), Args...>;
 
 /* -------------------------------------------------------------------------- */
 
@@ -172,23 +168,25 @@ constexpr decltype(auto) invoke_at_helper(Args&&... args)
     return invoke_at<I>(forward_move_once<A, I>(std::forward<Args>(args))...);
 }
 
-// TODO: cosmetics
 template <size_t... Is, typename... Args>
-constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>, Args&&... args)
+constexpr decltype(auto) invoke_forall_helper(index_sequence<Is...>,
+                                              Args&&... args)
 {
     constexpr size_t arity = sizeof...(Is);        
-    
+
     using result_type = decltype(
         invoke_at_helper<arity, 0>(std::forward<Args>(args)...)
     );
 
-    if constexpr ((... && same_as<result_type, decltype(invoke_at_helper<arity, Is>(std::forward<Args>(args)...))>)) {
+    if constexpr ((... && same_as<result_type,
+        decltype(invoke_at_helper<arity, Is>(std::forward<Args>(args)...))
+    >)) {
         return array<result_type, arity>{
             invoke_at_helper<arity, Is>(std::forward<Args>(args)...)...
         };
     }
     else {
-        return tuple{ 
+        return tuple{
             invoke_at_helper<arity, Is>(std::forward<Args>(args)...)...
         };
     }
@@ -201,7 +199,7 @@ constexpr decltype(auto) invoke_forall(Args&&... args) {
         return invoke_at<0>(std::forward<Args>(args)...);
     }
     else {
-        constexpr size_t arity = first_arity<Args...>();
+        constexpr size_t arity = first_arity_or_zero<Args...>();
 
         return invoke_forall_helper(
             make_index_sequence<arity>{},
