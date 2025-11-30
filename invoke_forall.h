@@ -119,8 +119,8 @@ concept SameArity = HaveArity<first_arity_or_zero<Args...>(), Args...>;
 /**
  * Tries to forward the given value `t`.
  *
- * If `t` is an rvalue reference (`T&&`), then it is moved only during the last
- * invoke, i.e. when `A == I + 1`.
+ * If `t` is an non-Gettable rvalue reference (`T&&`), then it is moved only
+ * during the last invoke, i.e. when `A == I + 1`.
  */
 template <std::size_t A, std::size_t I, typename T>
 constexpr decltype(auto) forward_copy_rvalue(T&& t)
@@ -204,7 +204,8 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
 
     if constexpr ((... && std::same_as<first_result_type,
                                        decltype(invoke_at_wrapper<arity, Is>(
-                                           std::forward<Args>(args)...))>)) {
+                                           std::forward<Args>(args)...))>)
+    ) {
         using array_type = std::conditional_t<
             std::is_reference_v<first_result_type>,
             std::reference_wrapper<std::remove_reference_t<first_result_type>>,
