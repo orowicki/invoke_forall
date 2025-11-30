@@ -157,8 +157,8 @@ constexpr decltype(auto) try_get(T&& t)
  * - `xi = std::get<I>(argi)` if `argi` is Gettable, or
  * - `xi = argi`.
  *
- * If the return type of the invoke is void, performs the call, but returns
- * std::monostate, so that the result of `invoke_forall` isn't broken.
+ * If the return type of the invoke is `void`, performs the call, but returns
+ * `std::monostate`, so that the result of `invoke_forall` isn't broken.
  */
 template <std::size_t I, typename... Args>
 constexpr decltype(auto) invoke_at(Args&&... args)
@@ -217,11 +217,11 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
 
 
 /**
- * If none of the arguments (arg1, ..., argn) are Gettable,
- * returns a result equivalent to calling std::invoke(arg1, ..., argn).
+ * If none of the arguments `(arg1, ..., argn)` are Gettable,
+ * returns a result equivalent to calling `std::invoke(arg1, ..., argn)`.
  *
  * Otherwise, the return value `ret` is an object such that
- * std::get<i>(ret) is the result of the i-th invoke.
+ * `std::get<i>(ret)` is the result of the `i`-th invoke.
  */
 template <typename... Args>
 requires NonEmpty<Args...> && SameArity<Args...>
