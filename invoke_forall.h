@@ -31,7 +31,7 @@ namespace detail
 template <typename T> 
 struct protected_arg {
     T value;
-    using is_protected = void;
+    using is_protected_tag = void;
 
     explicit constexpr protected_arg(T&& arg) : value(std::forward<T>(arg)) {}
 };
@@ -39,7 +39,7 @@ struct protected_arg {
 /** Satisfied if `T` is protected by `protect_arg()`. */
 template <typename T>
 concept Protected =
-    requires { typename std::remove_cvref_t<T>::is_protected; };
+    requires { typename std::remove_cvref_t<T>::is_protected_tag; };
 
 template <typename T>
 concept HasTupleSize =
@@ -126,15 +126,14 @@ template <std::size_t A, std::size_t I, typename T>
 constexpr decltype(auto) forward_copy_rvalue(T&& t)
 {
     if constexpr (A != I + 1 && !Gettable<T> && !Protected<T> &&
-                  std::is_rvalue_reference_v<T&&>
-    ) {
+                  std::is_rvalue_reference_v<T&&>) {
         return std::remove_cvref_t<T>(t);
     } else {
         return std::forward<T>(t);
     }
 }
 
-/** 
+/**
  * Returns the appropriate value based on `T`:
  * - if `T` is Gettable, returns the `I`-th element of `t`
  * - if `T` is Protected, extracts its value from the wrapper and returns it
@@ -162,7 +161,7 @@ constexpr decltype(auto) try_get(T&& t)
  * `std::monostate`, so that the result of `invoke_forall` isn't broken.
  */
 template <std::size_t I, typename... Args>
-constexpr decltype(auto) invoke_at(Args&&... args)
+constexpr decltype(auto) invoke_at(Args&&...args)
 {
     auto call_invoke = [&]() -> decltype(auto) {
         return std::invoke(try_get<I>(std::forward<Args>(args))...);
@@ -181,52 +180,113 @@ constexpr decltype(auto) invoke_at(Args&&... args)
  * through `forward_copy_rvalue()`.
  */
 template <std::size_t A, std::size_t I, typename... Args>
-constexpr decltype(auto) invoke_at_wrapper(Args&&... args)
+constexpr decltype(auto) invoke_at_wrapper(Args&&...args)
 {
-    return invoke_at<I>(
-        forward_copy_rvalue<A, I>(std::forward<Args>(args))...);
+    return invoke_at<I>(forward_copy_rvalue<A, I>(std::forward<Args>(args))...);
 }
 
-template <typename T, std::size_t N>
+/**
+ * Custom container that holds lvalue references and satisfies
+ * `std::ranges::random_access_range`.
+ * This is needed in case `invoke_forall` returns the same
+ * lvalue reference type for every `std::invoke`, because `std::array` can not
+ * hold lvalue references.
+ */
+template <typename T, std::size_t N> 
 struct ref_range {
-    std::array<T*, N> ptrs;
+    std::array<T *, N> ptrs;
 
-    template <typename... Us>
-    constexpr ref_range(Us&&... args) : ptrs{&args...} {}
+    template <typename... Args>
+    constexpr ref_range(Args&&...args) : ptrs{ &args... } {}
 
+    /**
+     * Custom iterator that fits the random access iterator category.
+     */
     struct iterator {
         using iterator_category = std::random_access_iterator_tag;
-        using difference_type   = std::ptrdiff_t;
-        using value_type        = T;
-        using pointer           = T*;
-        using reference         = T&;
+        using difference_type = std::ptrdiff_t;
+        using value_type = T;
+        using pointer = T*;
+        using reference = T&;
 
-        T** current;
+        T **ptr;
 
-        constexpr reference operator*() const { return **current; }
-        constexpr pointer operator->() const { return *current; }
+        constexpr reference operator*() const { return **ptr; }
+        constexpr pointer operator->() const { return *ptr; }
 
-        constexpr iterator& operator++() { ++current; return *this; }
-        constexpr iterator operator++(int) { iterator tmp = *this; ++current; return tmp; }
-        constexpr iterator& operator--() { --current; return *this; }
-        constexpr iterator operator--(int) { iterator tmp = *this; --current; return tmp; }
+        constexpr iterator& operator++()
+        {
+            ++ptr;
+            return *this;
+        }
 
-        constexpr iterator& operator+=(difference_type n) { current += n; return *this; }
-        constexpr iterator& operator-=(difference_type n) { current -= n; return *this; }
-        
-        friend constexpr iterator operator+(iterator it, difference_type n) { return {it.current + n}; }
-        friend constexpr iterator operator+(difference_type n, iterator it) { return {it.current + n}; }
-        friend constexpr iterator operator-(iterator it, difference_type n) { return {it.current - n}; }
-        friend constexpr difference_type operator-(iterator a, iterator b) { return a.current - b.current; }
+        constexpr iterator operator++(int)
+        {
+            iterator tmp = *this;
+            ++ptr;
+            return tmp;
+        }
 
-        constexpr bool operator==(const iterator& other) const = default;
+        constexpr iterator& operator--()
+        {
+            --ptr;
+            return *this;
+        }
+
+        constexpr iterator operator--(int)
+        {
+            iterator tmp = *this;
+            --ptr;
+            return tmp;
+        }
+
+        constexpr iterator& operator+=(difference_type n)
+        {
+            ptr += n;
+            return *this;
+        }
+        constexpr iterator& operator-=(difference_type n)
+        {
+            ptr -= n;
+            return *this;
+        }
+
+        friend constexpr iterator operator+(iterator it, difference_type n)
+        {
+            return { it.ptr + n };
+        }
+
+        friend constexpr iterator operator+(difference_type n, iterator it)
+        {
+            return { it.ptr + n };
+        }
+
+        friend constexpr iterator operator-(iterator it, difference_type n)
+        {
+            return { it.ptr - n };
+        }
+
+        friend constexpr difference_type operator-(iterator a, iterator b)
+        {
+            return a.ptr - b.ptr;
+        }
+
         constexpr auto operator<=>(const iterator& other) const = default;
-        
-        constexpr reference operator[](difference_type n) const { return *current[n]; }
+
+        constexpr reference operator[](difference_type n) const
+        {
+            return *ptr[n];
+        }
     };
 
-    constexpr iterator begin() const { return {const_cast<T**>(ptrs.data())}; }
-    constexpr iterator end() const { return {const_cast<T**>(ptrs.data()) + N}; }
+    constexpr iterator begin() const
+    {
+        return { const_cast<T **>(ptrs.data()) };
+    }
+    constexpr iterator end() const
+    {
+        return { const_cast<T **>(ptrs.data()) + N };
+    }
 
     constexpr std::size_t size() const { return N; }
     constexpr T& operator[](std::size_t i) const { return *ptrs[i]; }
@@ -237,22 +297,27 @@ struct ref_range {
 
 } /* namespace detail */
 
+/**
+ * std injection that allows for `std::get<i>()` on the custom ref_range 
+ * container - makes ref_range tuple-like.
+ */
 namespace std
 {
 
-    template <typename T, size_t N>
-    struct tuple_size<detail::ref_range<T, N>> 
-        : integral_constant<size_t, N> {};
+template <typename T, size_t N>
+struct tuple_size<detail::ref_range<T, N>> : integral_constant<size_t, N> {
+};
 
-    template <size_t I, typename T, size_t N>
-    struct tuple_element<I, detail::ref_range<T, N>> {
-        using type = T&;
-    };
+template <size_t I, typename T, size_t N>
+struct tuple_element<I, detail::ref_range<T, N>> {
+    using type = T&;
+};
 
-    template <size_t I, typename T, size_t N>
-    constexpr T& get(const detail::ref_range<T, N>& r) noexcept {
-        return r.template get<I>();
-    }
+template <size_t I, typename T, size_t N>
+constexpr T& get(const detail::ref_range<T, N>& r) noexcept
+{
+    return r.template get<I>();
+}
 
 } /* namespace std */
 
@@ -268,7 +333,7 @@ namespace detail
  */
 template <std::size_t... Is, typename... Args>
 constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
-                                                Args&&... args)
+                                                Args&&...args)
 {
     constexpr size_t arity = sizeof...(Is);
 
@@ -277,26 +342,22 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
 
     if constexpr ((... && std::same_as<first_result_type,
                                        decltype(invoke_at_wrapper<arity, Is>(
-                                           std::forward<Args>(args)...))>)
-    ) {
+                                           std::forward<Args>(args)...))>)) {
         if constexpr (std::is_reference_v<first_result_type>) {
             using base_type = std::remove_reference_t<first_result_type>;
-             
-            return ref_range<base_type, arity>{
-                invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
-            };
+
+            return ref_range<base_type, arity>{ invoke_at_wrapper<arity, Is>(
+                std::forward<Args>(args)...)... };
         } else {
-            return std::array<first_result_type, arity>{ 
+            return std::array<first_result_type, arity>{
                 invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
             };
         }
     } else {
-        return std::tuple{ 
-            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
-        };
+        return std::tuple{ invoke_at_wrapper<arity, Is>(
+            std::forward<Args>(args)...)... };
     }
 }
-
 
 /**
  * If none of the arguments `(arg1, ..., argn)` are Gettable,
@@ -307,7 +368,7 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
  */
 template <typename... Args>
 requires NonEmpty<Args...> && SameArity<Args...>
-constexpr decltype(auto) invoke_forall(Args&&... args)
+constexpr decltype(auto) invoke_forall(Args&&...args)
 {
     if constexpr (NoneGettable<Args...>) {
         return invoke_at<0>(std::forward<Args>(args)...);
@@ -322,11 +383,12 @@ constexpr decltype(auto) invoke_forall(Args&&... args)
 /**
  * Makes `invoke_forall` treat protected Gettable argument `arg` as a regular
  * argument.
- * 
+ *
  * If given argument is non-Gettable, does nothing and returns `arg` as it is.
  */
-template <typename T>
-constexpr decltype(auto) protect_arg(T&& arg) {
+template <typename T> 
+constexpr decltype(auto) protect_arg(T&& arg)
+{
     if constexpr (Gettable<T>) {
         return protected_arg<T>{ std::forward<T>(arg) };
     } else {
@@ -337,12 +399,12 @@ constexpr decltype(auto) protect_arg(T&& arg) {
 } /* namespace detail */
 
 template <typename... Args>
-constexpr decltype(auto) invoke_forall(Args&&... args)
+constexpr decltype(auto) invoke_forall(Args&&...args)
 {
     return detail::invoke_forall(std::forward<Args>(args)...);
 }
 
-template <typename T>
+template <typename T> 
 constexpr decltype(auto) protect_arg(T&& arg)
 {
     return detail::protect_arg(std::forward<T>(arg));
