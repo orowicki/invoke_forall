@@ -5,12 +5,12 @@
  * Date 30.11.2025
  *
  * The `invoke_forall` template allows the user to perform multiple
- * `std::invoke` calls. The function takes both regular and TupleLike
+ * `std::invoke` calls. The function takes both regular and Gettable
  * arguments and returns an object that the user can use `std::get<i>` on to
  * get the result of the `i`-th invoke.
  *
  * The module also provides the `protect_arg()` function that makes
- * `invoke_forall` treat protected TupleLike arguments as regular arguments.
+ * `invoke_forall` treat protected Gettable arguments as regular arguments.
  */
 
 #ifndef INVOKE_FORALL_H
@@ -244,6 +244,21 @@ constexpr decltype(auto) invoke_forall(Args&&... args)
     }
 }
 
+/**
+ * Makes `invoke_forall` treat protected Gettable argument `arg` as a regular
+ * argument.
+ * 
+ * If given argument is non-Gettable, does nothing and returns `arg` as it is.
+ */
+template <typename T>
+constexpr decltype(auto) protect_arg(T&& arg) {
+    if constexpr (Gettable<T>) {
+        return protected_arg<T>{ std::forward<T>(arg) };
+    } else {
+        return std::forward<T>(arg);
+    }
+}
+
 } /* namespace detail */
 
 template <typename... Args>
@@ -255,7 +270,7 @@ constexpr decltype(auto) invoke_forall(Args&&... args)
 template <typename T>
 constexpr decltype(auto) protect_arg(T&& arg)
 {
-    return detail::protected_arg<T>{ std::forward<T>(arg) };
+    return detail::protect_arg(std::forward<T>(arg));
 }
 
 #endif /* INVOKE_FORALL_H */
