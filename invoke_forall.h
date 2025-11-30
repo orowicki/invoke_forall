@@ -328,7 +328,7 @@ namespace detail
  * Sequentially does `m` invoke calls, where `m` is the common arity of all
  * Gettable arguments.
  *
- * If each call results in the same return type, returns a `std::array` which
+ * If each call results in the same return type, returns a container that
  * satisfies the `std::ranges::random_access_range` concept.
  */
 template <std::size_t... Is, typename... Args>
@@ -346,16 +346,18 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
         if constexpr (std::is_reference_v<first_result_type>) {
             using base_type = std::remove_reference_t<first_result_type>;
 
-            return ref_range<base_type, arity>{ invoke_at_wrapper<arity, Is>(
-                std::forward<Args>(args)...)... };
+            return ref_range<base_type, arity>{
+                invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)... 
+            };
         } else {
             return std::array<first_result_type, arity>{
                 invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
             };
         }
     } else {
-        return std::tuple{ invoke_at_wrapper<arity, Is>(
-            std::forward<Args>(args)...)... };
+        return std::tuple{ 
+            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
+        };
     }
 }
 
