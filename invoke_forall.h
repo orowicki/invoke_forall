@@ -188,8 +188,9 @@ constexpr decltype(auto) invoke_at_wrapper(Args&&...args)
 /**
  * Custom container that holds lvalue references and satisfies
  * `std::ranges::random_access_range`.
+ * 
  * This is needed in case `invoke_forall` returns the same
- * lvalue reference type for every `std::invoke`, because `std::array` can not
+ * lvalue reference type for every `std::invoke`, because `std::array` cannot
  * hold lvalue references.
  */
 template <typename T, std::size_t N> 
@@ -200,19 +201,18 @@ struct ref_range {
     constexpr ref_range(Args&&...args) : ptrs{ &args... } {}
 
     /**
-     * Custom iterator that fits the random access iterator category.
+     * Random-access iterator for navigating a `ref_range`.
      */
     struct iterator {
         using iterator_category = std::random_access_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = T;
-        using pointer = T*;
-        using reference = T&;
 
         T **ptr;
 
-        constexpr reference operator*() const { return **ptr; }
-        constexpr pointer operator->() const { return *ptr; }
+        constexpr T& operator*() const {
+            return **ptr;
+        }
 
         constexpr iterator& operator++()
         {
@@ -245,6 +245,7 @@ struct ref_range {
             ptr += n;
             return *this;
         }
+
         constexpr iterator& operator-=(difference_type n)
         {
             ptr -= n;
@@ -273,7 +274,7 @@ struct ref_range {
 
         constexpr auto operator<=>(const iterator& other) const = default;
 
-        constexpr reference operator[](difference_type n) const
+        constexpr T& operator[](difference_type n) const
         {
             return *ptr[n];
         }
@@ -281,32 +282,38 @@ struct ref_range {
 
     constexpr iterator begin() const
     {
-        return { const_cast<T **>(ptrs.data()) };
+        return { const_cast<T**>(ptrs.data()) };
     }
     constexpr iterator end() const
     {
-        return { const_cast<T **>(ptrs.data()) + N };
+        return { const_cast<T**>(ptrs.data()) + N };
     }
 
-    constexpr std::size_t size() const { return N; }
-    constexpr T& operator[](std::size_t i) const { return *ptrs[i]; }
+    constexpr std::size_t size() const {
+        return N;
+    }
+
+    constexpr T& operator[](std::size_t i) const {
+        return *ptrs[i];
+    }
 
     template <std::size_t I>
-    constexpr T& get() const { return *ptrs[I]; }
+    constexpr T& get() const {
+        return *ptrs[I];
+    }
 };
 
 } /* namespace detail */
 
 /**
- * std injection that allows for `std::get<i>()` on the custom ref_range 
- * container - makes ref_range tuple-like.
+ * `std` injection that allows for `std::get<i>()` on the custom `ref_range` 
+ * container (makes `ref_range` Gettable)
  */
 namespace std
 {
 
 template <typename T, size_t N>
-struct tuple_size<detail::ref_range<T, N>> : integral_constant<size_t, N> {
-};
+struct tuple_size<detail::ref_range<T, N>> : integral_constant<size_t, N> {};
 
 template <size_t I, typename T, size_t N>
 struct tuple_element<I, detail::ref_range<T, N>> {
@@ -314,9 +321,9 @@ struct tuple_element<I, detail::ref_range<T, N>> {
 };
 
 template <size_t I, typename T, size_t N>
-constexpr T& get(const detail::ref_range<T, N>& r) noexcept
+constexpr T& get(const detail::ref_range<T, N>& range) noexcept
 {
-    return r.template get<I>();
+    return range.template get<I>();
 }
 
 } /* namespace std */
