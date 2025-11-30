@@ -1,5 +1,5 @@
 #include "invoke_forall.h"
-#include <vector>
+#include <array>
 #include <string>
 #include <tuple>
 
@@ -18,11 +18,11 @@ int main() {
     static_assert(std::get<2>(res1) == 6); // != 0
 
     constexpr auto res2 = invoke_forall(
-        [](std::string s, std::vector<int> v) {
-            return s.length() * v.size();
+        [](std::string s, std::array<int, 5> a) {
+            return s.length() * a.size();
         },
         std::tuple{std::string("aa"), std::string("bbb")},
-        protect_arg(std::vector<int>{1, 2, 3, 4, 5})
+        protect_arg(std::array<int, 5>{1, 2, 3, 4, 5})
     );
 
     static_assert(std::get<0>(res2) == 10);

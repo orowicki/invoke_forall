@@ -125,8 +125,9 @@ concept SameArity = HaveArity<first_arity_or_zero<Args...>(), Args...>;
 template <std::size_t A, std::size_t I, typename T>
 constexpr decltype(auto) forward_copy_rvalue(T&& t)
 {
-    if constexpr (I + 1 != A && !Gettable<T> && !Protected<T> &&
-                  std::is_rvalue_reference_v<T&&>) {
+    if constexpr (A != I + 1 && !Gettable<T> && !Protected<T> &&
+                  std::is_rvalue_reference_v<T&&>
+    ) {
         return std::remove_cvref_t<T>(t);
     } else {
         return std::forward<T>(t);
