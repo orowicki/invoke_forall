@@ -127,7 +127,7 @@ constexpr decltype(auto) forward_copy_rvalue(T&& t)
 {
     if constexpr (I + 1 != A && !Gettable<T> && !Protected<T> &&
                   std::is_rvalue_reference_v<T&&>) {
-        return T(t);
+        return std::remove_cvref_t<T>(t);
     } else {
         return std::forward<T>(t);
     }
@@ -205,8 +205,13 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
     if constexpr ((... && std::same_as<first_result_type,
                                        decltype(invoke_at_wrapper<arity, Is>(
                                            std::forward<Args>(args)...))>)) {
-        return std::array<first_result_type, arity> { 
-            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)... 
+        using array_type = std::conditional_t<
+            std::is_reference_v<first_result_type>,
+            std::reference_wrapper<std::remove_reference_t<first_result_type>>,
+            first_result_type>;
+
+        return std::array<array_type, arity>{ array_type{
+            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)}... 
         };
     } else {
         return std::tuple { 
