@@ -28,6 +28,65 @@
 namespace detail
 {
 
+template <typename Iter>
+struct ref_iterator {
+    using iterator_category = std::random_access_iterator_tag;
+    using value_type        = typename std::iterator_traits<Iter>::value_type::type;
+    using difference_type   = std::ptrdiff_t;
+    using pointer           = value_type*;
+    using reference         = value_type&;
+
+    Iter current;
+
+    constexpr ref_iterator() = default;
+    constexpr explicit ref_iterator(Iter it) : current(it) {}
+
+    constexpr reference operator*() const { return current->get(); }
+    constexpr pointer operator->() const { return &current->get(); }
+
+    constexpr ref_iterator& operator++() { ++current; return *this; }
+    constexpr ref_iterator operator++(int) { auto tmp = *this; ++current; return tmp; }
+    constexpr ref_iterator& operator--() { --current; return *this; }
+    constexpr ref_iterator operator--(int) { auto tmp = *this; --current; return tmp; }
+
+    constexpr ref_iterator& operator+=(difference_type n) { current += n; return *this; }
+    constexpr ref_iterator& operator-=(difference_type n) { current -= n; return *this; }
+
+    constexpr reference operator[](difference_type n) const { return current[n].get(); }
+
+    friend constexpr bool operator==(const ref_iterator& a, const ref_iterator& b) { return a.current == b.current; }
+    friend constexpr auto operator<=>(const ref_iterator& a, const ref_iterator& b) { return a.current <=> b.current; }
+    
+    friend constexpr ref_iterator operator+(ref_iterator i, difference_type n) { return ref_iterator{i.current + n}; }
+    friend constexpr ref_iterator operator+(difference_type n, ref_iterator i) { return ref_iterator{i.current + n}; }
+    friend constexpr ref_iterator operator-(ref_iterator i, difference_type n) { return ref_iterator{i.current - n}; }
+    friend constexpr difference_type operator-(const ref_iterator& a, const ref_iterator& b) { return a.current - b.current; }
+};
+
+/**
+ * A container acting like std::array but for references.
+ * It stores std::reference_wrapper<T> internally but exposes T& via iterators and operator[].
+ */
+template <typename T, std::size_t N>
+struct reference_array {
+    std::array<std::reference_wrapper<T>, N> items;
+    
+    using value_type = T;
+    using iterator = ref_iterator<typename std::array<std::reference_wrapper<T>, N>::iterator>;
+    using const_iterator = ref_iterator<typename std::array<std::reference_wrapper<T>, N>::const_iterator>;
+
+    constexpr iterator begin() { return iterator{items.begin()}; }
+    constexpr iterator end() { return iterator{items.end()}; }
+    constexpr const_iterator begin() const { return const_iterator{items.begin()}; }
+    constexpr const_iterator end() const { return const_iterator{items.end()}; }
+    
+    constexpr T& operator[](std::size_t i) const { return items[i].get(); }
+    constexpr std::size_t size() const { return N; }
+    
+    template <std::size_t I>
+    constexpr T& get() const { return std::get<I>(items).get(); }
+};
+
 template <typename T> 
 struct protected_arg {
     T value;
@@ -207,16 +266,21 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
                                        decltype(invoke_at_wrapper<arity, Is>(
                                            std::forward<Args>(args)...))>)
     ) {
-        using array_type = std::conditional_t<
-            std::is_reference_v<first_result_type>,
-            std::reference_wrapper<std::remove_reference_t<first_result_type>>,
-            first_result_type>;
-
-        return std::array<array_type, arity>{ array_type{
-            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)}... 
-        };
+        if constexpr (std::is_reference_v<first_result_type>) {
+            using base_type = std::remove_reference_t<first_result_type>;
+             
+            return reference_array<base_type, arity>{
+                std::array<std::reference_wrapper<base_type>, arity>{
+                    invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)... 
+                }
+            };
+        } else {
+            return std::array<first_result_type, arity>{ 
+                invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)... 
+            };
+        }
     } else {
-        return std::tuple { 
+        return std::tuple{ 
             invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)... 
         };
     }
