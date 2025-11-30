@@ -37,7 +37,7 @@ struct protected_arg {
         : value(std::forward<T>(arg)) {}
 };
 
-/// Satisfied if `T` is protected by `protect_arg()`.
+/** Satisfied if `T` is protected by `protect_arg()`. */
 template <typename T>
 concept Protected = requires() {
     typename std::remove_cvref_t<T>::is_protected;
@@ -63,7 +63,7 @@ concept HasTupleSizeDerivedFromIntegralConstant = HasTupleSize<T> &&
 template <typename T>
 concept TupleLike = HasTupleSizeDerivedFromIntegralConstant<T>;
 
-/// Satisfied if `std::get<I>(t)` is valid.
+/** Satisfied if `std::get<I>(t)` is valid. */
 template <std::size_t I, typename T>
 concept HasGet = requires(T t) {
     (void)std::get<I>(t);
@@ -83,54 +83,42 @@ concept Gettable = TupleLike<T> && !Protected<T> &&
 template <typename... Args>
 concept NoneGettable = (... && !Gettable<Args>);
 
+template <typename... Args>
+concept NonEmpty = sizeof...(Args) > 0;
+
 /**
  * Tries to forward the given value `t`.
  * 
  * If `t` is an rvalue reference (`T&&`), then it is moved only during the last
- * invoke, i.e. when `A == I - 1`.
+ * invoke, i.e. when `A == I + 1`.
  */
 template <std::size_t A, std::size_t I, typename T>
 constexpr decltype(auto) forward_copy_rvalue(T&& t)
 {
-    if constexpr (A == I + 1) {
+    if constexpr (I + 1 != A && !Gettable<T> && !Protected<T> &&
+                  std::is_rvalue_reference_v<T&&>) {
+        return T(t);
+    } else {
         return std::forward<T>(t);
-    }
-    else {
-        if constexpr (!Gettable<T> && std::is_rvalue_reference_v<T&&>) {
-            if constexpr (Protected<T>) {
-                return std::forward<T>(t);
-            }
-            else {
-                return T(t);
-            }
-        }
-        else {
-            return std::forward<T>(t);
-        }
     }
 }
 
-/// Extracts the argument `t` value, which will be passed to the `I`-th invoke.
+/** Extracts the argument `t` value, which will be passed to the `I`-th invoke. */
 template <std::size_t I, typename T> 
 constexpr decltype(auto) try_get(T&& t)
 {
     if constexpr (Gettable<T>) {
         // If T is Gettable, returns std::get<I>(t).
         return std::get<I>(std::forward<T>(t));
-    }
-    else if constexpr (Protected<T>) {
+    } else if constexpr (Protected<T>) {
         // If T is protected by protect_arg(), returns (t.value).
         auto &&value = std::forward<T>(t).value;
         return std::forward<decltype(value)>(value);
-    }
-    else {
+    } else {
         // Otherwise, returns t.
         return std::forward<T>(t);
     }
 }
-
-template <typename... Args>
-concept NonEmpty = sizeof...(Args) > 0;
 
 /**
  * Returns the arity of the first Gettable argument,
@@ -140,11 +128,9 @@ template <typename T, typename... Args>
 constexpr std::size_t first_arity_or_zero() {
     if constexpr (Gettable<T>) {
         return std::tuple_size_v<std::remove_cvref_t<T>>;
-    }
-    else if constexpr (NonEmpty<Args...>) {
+    } else if constexpr (NonEmpty<Args...>) {
         return first_arity_or_zero<Args...>();
-    }
-    else {
+    } else {
         return 0;
     }
 }
@@ -158,11 +144,11 @@ template <std::size_t A, typename T>
 concept HasArity = !Gettable<T> ||
                    std::tuple_size_v<std::remove_cvref_t<T>> == A;
 
-/// Satisfied if all arguments have the same arity, equal to `A`.
+/** Satisfied if all arguments have the same arity, equal to `A`. */
 template <std::size_t A, typename... Args>
 concept HaveArity = (... && HasArity<A, Args>);
 
-/// Satisfied if all arguments have the same arity.
+/* Satisfied if all arguments have the same arity. */
 template <typename... Args>
 concept SameArity = HaveArity<first_arity_or_zero<Args...>(), Args...>;
 
@@ -182,8 +168,7 @@ constexpr decltype(auto) invoke_at(Args&&... args)
         // Return type void results in an undefined behaviour.
         call_invoke();
         return std::monostate{};
-    }
-    else {
+    } else {
         return call_invoke();
     }
 }
@@ -225,8 +210,7 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
         return std::array<result_type, arity>{
             invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
         };
-    }
-    else {
+    } else {
         return std::tuple{
             invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
         };
@@ -240,8 +224,7 @@ constexpr decltype(auto) invoke_forall(Args&&... args) {
         // If none of the arguments (arg1, ..., argn) are Gettable,
         // this is equivalent to std::invoke(arg1, ..., argn).
         return invoke_at<0>(std::forward<Args>(args)...);
-    }
-    else {
+    } else {
         constexpr size_t arity = first_arity_or_zero<Args...>();
         
         // Otherwise, the return value is an object such that
