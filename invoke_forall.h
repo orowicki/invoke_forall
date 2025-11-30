@@ -2,7 +2,7 @@
  * Interface and implementation of the `invoke_forall` template.
  *
  * Authors: Adam Bęcłowicz, Oskar Rowicki
- * Date 29.11.2025
+ * Date 30.11.2025
  *
  * The `invoke_forall` template allows the user to perform multiple
  * `std::invoke` calls. The function takes both regular and TupleLike
@@ -10,7 +10,7 @@
  * get the result of the `i`-th invoke.
  *
  * The module also provides the `protect_arg()` function that makes
- * `invoke_forall` treat the protected TupleLike argument as a regular argument.
+ * `invoke_forall` treat protected TupleLike arguments as regular arguments.
  */
 
 #ifndef INVOKE_FORALL_H
@@ -33,26 +33,24 @@ struct protected_arg {
     T value;
     using is_protected = void;
 
-    explicit constexpr protected_arg(T&& arg)
-        : value(std::forward<T>(arg)) {}
+    explicit constexpr protected_arg(T&& arg) : value(std::forward<T>(arg)) {}
 };
 
 /** Satisfied if `T` is protected by `protect_arg()`. */
 template <typename T>
-concept Protected = requires() {
-    typename std::remove_cvref_t<T>::is_protected;
-};
+concept Protected =
+    requires { typename std::remove_cvref_t<T>::is_protected; };
 
 template <typename T>
-concept HasTupleSize = requires {
-    typename std::tuple_size<std::remove_cvref_t<T>>;
-};
+concept HasTupleSize =
+    requires { typename std::tuple_size<std::remove_cvref_t<T>>; };
 
 template <typename T>
-concept HasTupleSizeDerivedFromIntegralConstant = HasTupleSize<T> &&
+concept HasTupleSizeDerivedFromIntegralConstant =
+    HasTupleSize<T> &&
     std::is_base_of_v<
-        std::integral_constant<
-            std::size_t, std::tuple_size<std::remove_cvref_t<T>>::value>,
+        std::integral_constant<std::size_t,
+                               std::tuple_size<std::remove_cvref_t<T>>::value>,
         std::tuple_size<std::remove_cvref_t<T>>>;
 
 /**
@@ -65,9 +63,7 @@ concept TupleLike = HasTupleSizeDerivedFromIntegralConstant<T>;
 
 /** Satisfied if `std::get<I>(t)` is valid. */
 template <std::size_t I, typename T>
-concept HasGet = requires(T t) {
-    (void)std::get<I>(t);
-};
+concept HasGet = requires(T t) { (void)std::get<I>(t); };
 
 /**
  * Satisfied if:
@@ -75,7 +71,8 @@ concept HasGet = requires(T t) {
  * - `std::get<i>(t)` is valid for all indices `0 ≤ i < std::tuple_size_v<T>`.
  */
 template <typename T>
-concept Gettable = TupleLike<T> && !Protected<T> &&
+concept Gettable =
+    TupleLike<T> && !Protected<T> &&
     []<std::size_t... Is>(std::index_sequence<Is...>) {
         return (... && HasGet<Is, T>);
     }(std::make_index_sequence<std::tuple_size_v<std::remove_cvref_t<T>>>{});
@@ -87,45 +84,12 @@ template <typename... Args>
 concept NonEmpty = sizeof...(Args) > 0;
 
 /**
- * Tries to forward the given value `t`.
- * 
- * If `t` is an rvalue reference (`T&&`), then it is moved only during the last
- * invoke, i.e. when `A == I + 1`.
- */
-template <std::size_t A, std::size_t I, typename T>
-constexpr decltype(auto) forward_copy_rvalue(T&& t)
-{
-    if constexpr (I + 1 != A && !Gettable<T> && !Protected<T> &&
-                  std::is_rvalue_reference_v<T&&>) {
-        return T(t);
-    } else {
-        return std::forward<T>(t);
-    }
-}
-
-/** Extracts the argument `t` value, which will be passed to the `I`-th invoke. */
-template <std::size_t I, typename T> 
-constexpr decltype(auto) try_get(T&& t)
-{
-    if constexpr (Gettable<T>) {
-        // If T is Gettable, returns std::get<I>(t).
-        return std::get<I>(std::forward<T>(t));
-    } else if constexpr (Protected<T>) {
-        // If T is protected by protect_arg(), returns (t.value).
-        auto &&value = std::forward<T>(t).value;
-        return std::forward<decltype(value)>(value);
-    } else {
-        // Otherwise, returns t.
-        return std::forward<T>(t);
-    }
-}
-
-/**
  * Returns the arity of the first Gettable argument,
  * or `0` if none are found.
  */
 template <typename T, typename... Args>
-constexpr std::size_t first_arity_or_zero() {
+constexpr std::size_t first_arity_or_zero()
+{
     if constexpr (Gettable<T>) {
         return std::tuple_size_v<std::remove_cvref_t<T>>;
     } else if constexpr (NonEmpty<Args...>) {
@@ -141,8 +105,8 @@ constexpr std::size_t first_arity_or_zero() {
  * - has arity equal to `A`.
  */
 template <std::size_t A, typename T>
-concept HasArity = !Gettable<T> ||
-                   std::tuple_size_v<std::remove_cvref_t<T>> == A;
+concept HasArity =
+    !Gettable<T> || std::tuple_size_v<std::remove_cvref_t<T>> == A;
 
 /** Satisfied if all arguments have the same arity, equal to `A`. */
 template <std::size_t A, typename... Args>
@@ -153,9 +117,48 @@ template <typename... Args>
 concept SameArity = HaveArity<first_arity_or_zero<Args...>(), Args...>;
 
 /**
+ * Tries to forward the given value `t`.
+ *
+ * If `t` is an rvalue reference (`T&&`), then it is moved only during the last
+ * invoke, i.e. when `A == I + 1`.
+ */
+template <std::size_t A, std::size_t I, typename T>
+constexpr decltype(auto) forward_copy_rvalue(T&& t)
+{
+    if constexpr (I + 1 != A && !Gettable<T> && !Protected<T> &&
+                  std::is_rvalue_reference_v<T&&>) {
+        return T(t);
+    } else {
+        return std::forward<T>(t);
+    }
+}
+
+/** 
+ * Returns the appropriate value based on `T`:
+ * - if `T` is Gettable, returns the `I`-th element of `t`
+ * - if `T` is Protected, extracts its value from the wrapper and returns it
+ * - otherwise returns `t` as it is
+ */
+template <std::size_t I, typename T> 
+constexpr decltype(auto) try_get(T&& t)
+{
+    if constexpr (Gettable<T>) {
+        return std::get<I>(std::forward<T>(t));
+    } else if constexpr (Protected<T>) {
+        auto&& value = std::forward<T>(t).value;
+        return std::forward<decltype(value)>(value);
+    } else {
+        return std::forward<T>(t);
+    }
+}
+
+/**
  * Performs the `I`-th `std::invoke(x1, ..., xn)` with:
  * - `xi = std::get<I>(argi)` if `argi` is Gettable, or
  * - `xi = argi`.
+ *
+ * If the return type of the invoke is void, performs the call, but returns
+ * std::monostate, so that the result of `invoke_forall` isn't broken.
  */
 template <std::size_t I, typename... Args>
 constexpr decltype(auto) invoke_at(Args&&... args)
@@ -165,7 +168,6 @@ constexpr decltype(auto) invoke_at(Args&&... args)
     };
 
     if constexpr (std::is_void_v<decltype(call_invoke())>) {
-        // Return type void results in an undefined behaviour.
         call_invoke();
         return std::monostate{};
     } else {
@@ -174,65 +176,64 @@ constexpr decltype(auto) invoke_at(Args&&... args)
 }
 
 /**
- * Serves as `invoke_at()` wrapper that forwards its arguments
+ * Serves as a `invoke_at()` wrapper that forwards its arguments
  * through `forward_copy_rvalue()`.
  */
 template <std::size_t A, std::size_t I, typename... Args>
 constexpr decltype(auto) invoke_at_wrapper(Args&&... args)
 {
     return invoke_at<I>(
-        // Only copy rvalue references once.
-        forward_copy_rvalue<A, I>(std::forward<Args>(args))...
-    );
+        forward_copy_rvalue<A, I>(std::forward<Args>(args))...);
 }
 
 /**
  * Sequentially does `m` invoke calls, where `m` is the common arity of all
  * Gettable arguments.
- * 
- * If each call results in the same return type, returns an object that
- * satisfies `std::ranges::random_access_range` concept.
+ *
+ * If each call results in the same return type, returns a `std::array` which
+ * satisfies the `std::ranges::random_access_range` concept.
  */
 template <std::size_t... Is, typename... Args>
 constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
                                                 Args&&... args)
 {
-    constexpr size_t arity = sizeof...(Is);        
+    constexpr size_t arity = sizeof...(Is);
 
-    using result_type = decltype(
-        invoke_at_wrapper<arity, 0>(std::forward<Args>(args)...)
-    );
+    using first_result_type =
+        decltype(invoke_at_wrapper<arity, 0>(std::forward<Args>(args)...));
 
-    if constexpr ((... && std::same_as<result_type,
-        decltype(invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...))
-    >)) {
-        // Instances of std::array support random access.
-        return std::array<result_type, arity>{
-            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
+    if constexpr ((... && std::same_as<first_result_type,
+                                       decltype(invoke_at_wrapper<arity, Is>(
+                                           std::forward<Args>(args)...))>)) {
+        return std::array<first_result_type, arity> { 
+            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)... 
         };
     } else {
-        return std::tuple{
-            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
+        return std::tuple { 
+            invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)... 
         };
     }
 }
 
+
+/**
+ * If none of the arguments (arg1, ..., argn) are Gettable,
+ * returns a result equivalent to calling std::invoke(arg1, ..., argn).
+ *
+ * Otherwise, the return value `ret` is an object such that
+ * std::get<i>(ret) is the result of the i-th invoke.
+ */
 template <typename... Args>
-    requires NonEmpty<Args...> && SameArity<Args...>
-constexpr decltype(auto) invoke_forall(Args&&... args) {
+requires NonEmpty<Args...> && SameArity<Args...>
+constexpr decltype(auto) invoke_forall(Args&&... args)
+{
     if constexpr (NoneGettable<Args...>) {
-        // If none of the arguments (arg1, ..., argn) are Gettable,
-        // this is equivalent to std::invoke(arg1, ..., argn).
         return invoke_at<0>(std::forward<Args>(args)...);
     } else {
         constexpr size_t arity = first_arity_or_zero<Args...>();
-        
-        // Otherwise, the return value is an object such that
-        // std::get<i>(ret) is the result of the i-th invoke.
-        return invoke_for_all_indices(
-            std::make_index_sequence<arity>{},
-            std::forward<Args>(args)...
-        );
+
+        return invoke_for_all_indices(std::make_index_sequence<arity>{},
+                                      std::forward<Args>(args)...);
     }
 }
 
@@ -244,7 +245,7 @@ constexpr decltype(auto) invoke_forall(Args&&... args)
     return detail::invoke_forall(std::forward<Args>(args)...);
 }
 
-template <typename T> 
+template <typename T>
 constexpr decltype(auto) protect_arg(T&& arg)
 {
     return detail::protected_arg<T>{ std::forward<T>(arg) };
