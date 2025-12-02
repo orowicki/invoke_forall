@@ -350,21 +350,21 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
     if constexpr ((... && std::same_as<first_result_type,
                                        decltype(invoke_at_wrapper<arity, Is>(
                                            std::forward<Args>(args)...))>)) {
-        if constexpr (std::is_reference_v<first_result_type>) {
+        if constexpr (std::is_lvalue_reference_v<first_result_type>) {
             using base_type = std::remove_reference_t<first_result_type>;
 
             return ref_range<base_type, arity>{
                 invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)... 
             };
         } else {
-            return std::array<first_result_type, arity>{
+            return std::array<std::remove_reference_t<first_result_type>, arity>{
                 invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
             };
         }
     } else {
-        return std::tuple{ 
+        return std::forward_as_tuple(
             invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
-        };
+        );
     }
 }
 
