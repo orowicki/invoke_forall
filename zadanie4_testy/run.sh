@@ -16,7 +16,7 @@ echo_fail() {
 }
 
 test_negative() {
-    for test in 101 102 103 103 105 106 107 202 203 204 502; do
+    for test in 102 103 103 105 106 107 202 203 204 502; do
         echo -n "test ${test}: "
         
         _=$(clang++ -Wall -Wextra -std=c++23 -O2 -DTEST_NUM=$test invoke_forall_test.cpp 2>&1)
@@ -35,7 +35,7 @@ test_negative() {
 }
 
 test_positive() {
-    for test in 201 301 402 403 404 501 601; do
+    for test in 101 201 301 402 403 404 501 601; do
         echo -n "test ${test}: "
         
         _=$(clang++ -Wall -Wextra -std=c++23 -O2 -DTEST_NUM=$test invoke_forall_test.cpp 2>&1)
