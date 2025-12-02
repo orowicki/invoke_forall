@@ -362,9 +362,9 @@ constexpr decltype(auto) invoke_for_all_indices(std::index_sequence<Is...>,
             };
         }
     } else {
-        return std::forward_as_tuple(
+        return std::tuple<std::conditional_t<std::is_lvalue_reference_v<decltype(invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...))>,decltype(invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)),std::remove_cvref_t<decltype(invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...))>>...>{
             invoke_at_wrapper<arity, Is>(std::forward<Args>(args)...)...
-        );
+        };
     }
 }
 
