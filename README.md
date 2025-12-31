@@ -7,9 +7,9 @@
 The library supports:
 - Automatic expansion of tuple-like arguments across multiple invocations.
 - Perfect forwarding and safe handling of rvalues.
-- Optional protection of tuple-like arguments using protect_arg to treat them as regular arguments.
-- Compile-time computation when possible, using constexpr.
-- Returning results as std::array (if types are uniform) or std::tuple.
+- Optional protection of tuple-like arguments using `protect_arg` to treat them as regular arguments.
+- Compile-time computation when possible, using `constexpr`.
+- Returning results as `std::array` (if types are uniform) or `std::tuple`.
 
 ## Features
 
