@@ -20,7 +20,7 @@ The library supports:
 - Fully contained in a single header with internal helpers hidden in the detail namespace.
 
 ## Usage
-```
+```cpp
 #include "invoke_forall.h"
 #include <tuple>
 #include <iostream>
@@ -36,7 +36,7 @@ int main() {
 ```
 
 ## Protecting arguments
-```
+```cpp
 auto protected_t = protect_arg(t); // treat t as a regular argument (eg. when callable takes a tuple as an argument)
 ```
 
